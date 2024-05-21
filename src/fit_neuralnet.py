@@ -202,7 +202,7 @@ if __name__ == '__main__':
     model_dir = root / 'models' / f'{args.feature}_nn_acc{round(avg_acc, 4)}'
     model_dir.mkdir(parents=True, exist_ok=True)
     
-    torch.save(best_fold_model, model_dir / f'{args.feature}_nn_model.pth')
+    torch.save(best_fold_model, model_dir / f'nn_{args.feature}_model.pth')
     
     with open(model_dir / 'cross_val_performance.txt', 'w') as f:
         for fold, (loss, acc) in enumerate(fold_performance):
