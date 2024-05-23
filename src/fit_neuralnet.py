@@ -3,7 +3,6 @@ This script fits a neural network to the training data using 10-fold cross-valid
 The type of features used as training data are either eigenvector centralities or time course averages, which can be selected from the terminal.
 '''
 
-print('[INFO]: Importing libraries.')
 from pathlib import Path
 import argparse
 import pickle
@@ -13,6 +12,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset, Subset
 from tqdm import tqdm
 from sklearn.model_selection import KFold
+from sklearn.metrics import f1_score
 import numpy as np
 import pandas as pd
 
@@ -52,11 +52,11 @@ class Model(nn.Module):
 
 def train_model(model, train_loader, criterion, optimizer, device):
     '''
-    Train model for one epoch. Returns the average loss across batches and the average accuracy.
+    Train model for one epoch. Returns the average loss across batches.
     '''
     model.train()
     epoch_loss = 0.0
-    epoch_acc = 0.0
+
     for inputs, labels in train_loader:
         inputs, labels = inputs.to(device), labels.to(device)
         optimizer.zero_grad()
@@ -65,18 +65,16 @@ def train_model(model, train_loader, criterion, optimizer, device):
         loss.backward()
         optimizer.step()
         epoch_loss += loss.item()
-        epoch_acc += ((outputs > 0.5) == labels).sum().item() / len(labels)
     
     avg_loss = epoch_loss / len(train_loader)
-    avg_acc = epoch_acc / len(train_loader)
 
-    return avg_loss, avg_acc
+    return avg_loss
 
 
 
 def evaluate_model(model, val_loader, criterion, device):
     '''
-    Evaluate model on validation data. Returns the average loss and accuracy.
+    Evaluate model on validation data. Returns the average loss and an F1 score.
     '''
     model.eval()
     with torch.no_grad():
@@ -85,32 +83,32 @@ def evaluate_model(model, val_loader, criterion, device):
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             val_loss = loss.item()
-            val_acc = ((outputs > 0.5) == labels).sum().item() / len(labels)
+            wf1_score = f1_score(labels.cpu().numpy(), (outputs.cpu().numpy() > 0.5).astype(int), average='weighted')
 
-    return val_loss, val_acc
+    return val_loss, wf1_score
 
 
 
 def early_stopping(train_loader, val_loader, model, criterion, optimizer, device, patience, delta):
     '''
-    Implements early stopping during training. Returns the best model, based on validation loss, along with its training and validation loss and accuracy. 
+    Implements early stopping during training. Returns the best model, based on validation loss, along with its training and validation loss. 
     '''
     best_loss = float('inf')
     best_model = None
     counter = 0
-    training_history = pd.DataFrame(columns=['train_loss', 'train_acc', 'val_loss', 'val_acc'])
+    loss_history = pd.DataFrame(columns=['train_loss', 'val_loss'])
     
     for epoch in tqdm(range(1, 101), desc='Training model'):
-        train_loss, train_acc = train_model(model, train_loader, criterion, optimizer, device)
-        val_loss, val_acc = evaluate_model(model, val_loader, criterion, device)
+        train_loss = train_model(model, train_loader, criterion, optimizer, device)
+        val_loss, wf1_score = evaluate_model(model, val_loader, criterion, device)
 
         # log training history
-        training_history.loc[len(training_history.index)] = [train_loss, train_acc, val_loss, val_acc] 
+        loss_history.loc[len(loss_history.index)] = [train_loss, val_loss] 
 
         # check if validation loss improved
         if val_loss < best_loss - delta:
             best_loss = val_loss
-            best_acc = val_acc
+            best_wf1 = wf1_score
             best_model = model.state_dict()
             counter = 0
         else:
@@ -124,7 +122,7 @@ def early_stopping(train_loader, val_loader, model, criterion, optimizer, device
     # load the best model
     model.load_state_dict(best_model)
     
-    return model, best_loss, best_acc, training_history
+    return model, best_loss, best_wf1, loss_history
 
 
 
@@ -159,7 +157,7 @@ if __name__ == '__main__':
 
     # track the best model
     best_fold_loss = float('inf')
-    best_fold_acc = None
+    best_fold_wf1 = None
     best_fold_model = None
     best_fold_index = None
 
@@ -179,38 +177,38 @@ if __name__ == '__main__':
         optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
         # train the model with early stopping
-        model, val_loss, val_acc, training_history = early_stopping(train_loader, val_loader, model, criterion, optimizer, device, PATIENCE, DELTA)
-        fold_performance.append((val_loss, val_acc))
-        print(f'[INFO]: Loss: {val_loss}, Accuracy: {val_acc}')
+        model, val_loss, wf1_score, loss_history = early_stopping(train_loader, val_loader, model, criterion, optimizer, device, PATIENCE, DELTA)
+        fold_performance.append((val_loss, wf1_score))
+        print(f'[INFO]: Loss: {val_loss}, F1: {wf1_score}')
 
         # save the best model
         if val_loss < best_fold_loss:
             best_fold_loss = val_loss
-            best_fold_acc = val_acc
+            best_fold_wf1 = wf1_score
             best_fold_model = model.state_dict()
-            best_fold_training_history = training_history
+            best_fold_loss_history = loss_history
             best_fold_index = fold + 1
 
     # calculate average performance across folds
     avg_loss = np.mean([perf[0] for perf in fold_performance])
-    avg_acc = np.mean([perf[1] for perf in fold_performance])
+    avg_f1 = np.mean([perf[1] for perf in fold_performance])
 
     # print average performance
-    print(f'---------------------------------\n[INFO]: Average Loss: {avg_loss}, Average Accuracy: {avg_acc}')
+    print(f'---------------------------------\n[INFO]: Average Loss: {avg_loss}, Average Weighted F1: {avg_f1}')
 
     # save the best model, performance and best training history
-    model_dir = root / 'models' / f'{args.feature}_nn_acc{round(avg_acc, 4)}'
+    model_dir = root / 'models' / f'nn_{args.feature}_f1_{round(avg_f1, 4)}'
     model_dir.mkdir(parents=True, exist_ok=True)
     
     torch.save(best_fold_model, model_dir / f'nn_{args.feature}_model.pth')
     
     with open(model_dir / 'cross_val_performance.txt', 'w') as f:
-        for fold, (loss, acc) in enumerate(fold_performance):
-            f.write(f'Fold {fold+1} | Loss: {loss} | Accuracy: {acc}\n')
-        f.write(f'\nAverage Loss: {avg_loss}, Average Accuracy: {avg_acc}\n')
+        for fold, (loss, f1) in enumerate(fold_performance):
+            f.write(f'Fold {fold+1} | Loss: {loss} | F1: {f1}\n')
+        f.write(f'\nAverage Loss: {avg_loss}, Average Weighted F1: {avg_f1}\n')
         f.write(f'Best Fold: {best_fold_index}')
     
-    best_fold_training_history.to_csv(model_dir / 'best_training_history.csv', index=False)
+    best_fold_loss_history.to_csv(model_dir / 'best_loss_history.csv', index=False)
 
     # save hyperparameters along with model architecture
     with open(model_dir / 'hyperparameters.txt', 'w') as f:

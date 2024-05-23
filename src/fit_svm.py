@@ -34,7 +34,7 @@ def tune_hyperparameters(X, y):
         {'kernel': ['rbf'], 'C': [0.1, 1, 10], 'gamma': [1, 0.1, 0.01, 0.001]}
     ]
 
-    grid = GridSearchCV(SVC(), param_grid, refit=True, scoring='f1', verbose=3)
+    grid = GridSearchCV(SVC(), param_grid, refit=True, scoring='f1_weighted', verbose=3)
     grid.fit(X, y)
 
     return grid.cv_results_, grid.best_score_, grid.best_estimator_, grid.best_params_
@@ -56,6 +56,7 @@ if __name__ == '__main__':
 
     print('[INFO]: Tuning hyperparameters.')
     cv_results, best_score, best_estimator, best_params = tune_hyperparameters(X_train, y_train)
+    print(f'[INFO]: Best weighted F1 score: {best_score:.4f}.')
 
     # save results
     model_dir = root / 'models' / f'svm_{args.feature}_f1_{best_score:.4f}'
