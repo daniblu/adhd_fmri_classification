@@ -104,8 +104,8 @@ if __name__ == '__main__':
     missing_subjects = []
 
     # extract features for training data, then testing data
-    testset_paths = [tc_train_path, tc_test_path]
-    for i, tc_path in enumerate(testset_paths):
+    set_paths = [tc_train_path, tc_test_path]
+    for i, tc_path in enumerate(set_paths):
 
         set = 'train' if i == 0 else 'test'
 
@@ -156,29 +156,35 @@ if __name__ == '__main__':
     tc_subjects_test = list( eigen_centralities[1].keys() )
     tc_subjects_all = tc_subjects_train + tc_subjects_test
 
-    # create training and testing data of centrality features
+    # create training and testing data of centrality features (some test subjects with tc data are not in pheno_data because their ADHD status is missing)
     X_train_centrality = torch.tensor( [eigen_centralities[0][subject] for subject in tc_subjects_train], dtype=torch.float32 )
-    X_test_centrality = torch.tensor( [eigen_centralities[1][subject] for subject in tc_subjects_test], dtype=torch.float32 )
-
-    # save X_test_centrality before normalization for checking purposes
-    with open(root / 'data' / 'processed' / 'X_test_centrality.pkl', 'wb') as f:
-        pickle.dump(X_test_centrality, f)
+    X_test_centrality = torch.tensor( [eigen_centralities[1][subject] for subject in tc_subjects_test if subject in pheno_data['ScanDir ID'].values], dtype=torch.float32 )
 
     # normalize centrality features
     X_train_centrality = normalize_data(X_train_centrality)
     X_test_centrality = normalize_data(X_test_centrality)
 
-    # create training and testing data of time course averages
+    # create training and testing data of time course averages (some test subjects with tc data are not in pheno_data because their ADHD status is missing)
     X_train_averages = torch.tensor( [time_course_averages[0][subject] for subject in tc_subjects_train], dtype=torch.float32 )
-    X_test_averages = torch.tensor( [time_course_averages[1][subject] for subject in tc_subjects_test], dtype=torch.float32 )
+    X_test_averages = torch.tensor( [time_course_averages[1][subject] for subject in tc_subjects_test if subject in pheno_data['ScanDir ID'].values], dtype=torch.float32 )
 
     # normalize average features
     X_train_averages = normalize_data(X_train_averages)
     X_test_averages = normalize_data(X_test_averages)
 
-    # create training and testing labels
+    # create training and testing labels (some test subjects with tc data are not in pheno_data because their ADHD status is missing. This time those subjects are recorded in missing_subjects)
     y_train = torch.tensor( [pheno_data['ADHD'][pheno_data['ScanDir ID']==subject].values[0] for subject in tc_subjects_train]).reshape(-1, 1).float()
-    y_test = torch.tensor( [pheno_data['ADHD'][pheno_data['ScanDir ID']==subject].values[0] for subject in tc_subjects_test] ).reshape(-1, 1).float()
+    
+    y_test = []
+    for subject in tc_subjects_test:
+        try:
+            y_test.append( pheno_data['ADHD'][pheno_data['ScanDir ID']==subject].values[0] )
+        except IndexError:
+            missing_subjects.append(f'No ADHD status | Subject: {subject}')
+    y_test = torch.tensor( y_test ).reshape(-1, 1).float()
+
+    # correct tc_subjects_test to only include subjects with pheno data
+    tc_subjects_test = [subject for subject in tc_subjects_test if subject in pheno_data['ScanDir ID'].values]
 
     # save data
     with open(root / 'data' / 'processed' / 'centrality_features_train.pkl', 'wb') as f:
@@ -193,11 +199,8 @@ if __name__ == '__main__':
     with open(root / 'data' / 'processed' / 'average_features_test.pkl', 'wb') as f:
         pickle.dump((X_test_averages, y_test), f)
 
-    # save subject orders
-    with open(root / 'data' / 'processed' / 'train_subject_order.txt', 'w') as f:
-        for subject in tc_subjects_train:
-            f.write(f'{subject}\n')
-    with open(root / 'data' / 'processed' / 'test_subject_order.txt', 'w') as f:
+    # save test subject order
+    with open(root / 'data' / 'processed' / 'test_subject_order_neuro.txt', 'w') as f:
         for subject in tc_subjects_test:
             f.write(f'{subject}\n')
     
