@@ -102,13 +102,6 @@ if __name__ == '__main__':
     X_train[['Age', 'Full4 IQ']] = scaler.fit_transform(X_train[['Age', 'Full4 IQ']])
     X_test[['Age', 'Full4 IQ']] = scaler.transform(X_test[['Age', 'Full4 IQ']])
 
-    # convert to arrays
-    #X_train = X_train.values.astype(float)
-    #y_train = y_train.values.astype(float)
-
-    #X_test = X_test.values.astype(float)
-    #y_test = y_test.values.astype(float)
-
     # save processed phenotypic data
     pheno_data.to_csv(root / 'data' / 'processed' / 'pheno_data_train_test.csv', index=False)
 
