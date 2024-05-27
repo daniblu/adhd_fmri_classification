@@ -30,8 +30,13 @@ def load_model(model_path: Path):
     '''
     Load model from directory.
     '''
+
+    with open(model_path / 'hyperparameters.txt', 'r') as f:
+            hyperparameters = f.read().splitlines()
+    TWO_LAYERS = hyperparameters[3].split(': ')[1] == 'True'
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = Model().to(device)
+    model = Model(two_layers=TWO_LAYERS).to(device)
     model_file = list(model_path.glob('*.pth'))[0]
     model.load_state_dict(torch.load(model_file, map_location=device))
 

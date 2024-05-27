@@ -37,8 +37,13 @@ def load_model(model_path: Path):
     model_info = {'type': splitted_path[0], 'feature': splitted_path[1]}
 
     if model_info['type'] == 'nn':
+
+        with open(model_path / 'hyperparameters.txt', 'r') as f:
+            hyperparameters = f.read().splitlines()
+        TWO_LAYERS = hyperparameters[3].split(': ')[1] == 'True'
+
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model = Model().to(device)
+        model = Model(two_layers=TWO_LAYERS).to(device)
         model_file = list(model_path.glob('*.pth'))[0]
         model.load_state_dict(torch.load(model_file, map_location=device))
 
@@ -188,6 +193,7 @@ if __name__ == '__main__':
     subject_ids, X_test, y_test = load_data(data_path, model_info)
 
     # evaluate model
+    print(f'[INFO]: Evaluating {model_info["type"]} model.')
     if model_info['type'] == 'nn':
         y_pred, summary_dict, ig_attributions = evaluate_nn(model, model_path, X_test, y_test)
 
