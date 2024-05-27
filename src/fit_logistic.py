@@ -19,7 +19,7 @@ def tune_hyperparameters(X, y):
         {'C': [0.1, 1, 10, 50], 'penalty': ['l1', 'l2'], 'solver': ['liblinear']},
     ]
 
-    grid = GridSearchCV(LogisticRegression(), param_grid, refit=True, scoring='f1_weighted', verbose=3)
+    grid = GridSearchCV(LogisticRegression(), param_grid, refit=True, scoring='f1_weighted', verbose=3, cv=10, n_jobs=-1)
     grid.fit(X, y)
 
     return grid.cv_results_, grid.best_score_, grid.best_estimator_, grid.best_params_

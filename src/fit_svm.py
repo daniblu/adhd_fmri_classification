@@ -30,11 +30,11 @@ def tune_hyperparameters(X, y):
     Tune hyperparameters for SVM using grid search.
     '''
     param_grid = [
-        {'kernel': ['linear'], 'C': [0.1, 1, 10]},
+        {'kernel': ['linear'], 'C': [0.1, 1, 5]},
         {'kernel': ['rbf'], 'C': [0.1, 1, 10], 'gamma': [1, 0.1, 0.01, 0.001]}
     ]
 
-    grid = GridSearchCV(SVC(), param_grid, refit=True, scoring='f1_weighted', verbose=3)
+    grid = GridSearchCV(SVC(), param_grid, refit=True, scoring='f1_weighted', verbose=3, cv=10, n_jobs=-1)
     grid.fit(X, y)
 
     return grid.cv_results_, grid.best_score_, grid.best_estimator_, grid.best_params_
