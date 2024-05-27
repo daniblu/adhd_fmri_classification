@@ -1,8 +1,9 @@
 '''
-This script fits a neural network to the training data using 10-fold cross-validation with early stopping.
+This script fits a neural network over a grid of hyperparameters to the training data using 10-fold cross-validation with early stopping.
 The type of features used as training data are either eigenvector centralities or time course averages, which can be selected from the terminal.
 '''
 
+from itertools import product
 from pathlib import Path
 import argparse
 import pickle
@@ -31,16 +32,23 @@ def input_parse():
 
 
 class Model(nn.Module):
-    def __init__(self):
+    def __init__(self, dropout=0.2):
         super(Model, self).__init__()
+        #self.linear_relu_stack = nn.Sequential(
+        #    nn.Linear(111, 64),
+        #    nn.ReLU(),
+        #    nn.Dropout(dropout),
+        #    nn.Linear(64, 32),
+        #    nn.ReLU(),
+        #    nn.Dropout(dropout),
+        #    nn.Linear(32, 1),
+        #    nn.Sigmoid()
+        #)
         self.linear_relu_stack = nn.Sequential(
             nn.Linear(111, 64),
             nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(64, 32),
-            nn.ReLU(),
-            nn.Dropout(0.3),
-            nn.Linear(32, 1),
+            nn.Dropout(dropout),
+            nn.Linear(64, 1),
             nn.Sigmoid()
         )
 
@@ -129,10 +137,13 @@ def early_stopping(train_loader, val_loader, model, criterion, optimizer, device
 if __name__ == '__main__':
 
     args = input_parse()
- 
-    # hyperparameters
-    BATCH_SIZE = 32
-    LEARNING_RATE = 0.001
+
+    # hyperparameter grid
+    BATCH_SIZE_OPTIONS = [16, 32, 64]
+    LEARNING_RATE_OPTIONS = [0.001, 0.01]
+    DROPOUT_OPTIONS = [0.2, 0.3, 0.4]
+    hyperparameter_grid = list(product(BATCH_SIZE_OPTIONS, LEARNING_RATE_OPTIONS, DROPOUT_OPTIONS))
+    
     K_FOLDS = 10
     PATIENCE = 5  # number of epochs to wait for improvement
     DELTA = 0.001  # minimum change in validation loss to qualify as an improvement
@@ -151,68 +162,86 @@ if __name__ == '__main__':
     # criterion
     criterion = nn.BCELoss(reduction='mean')
 
-    # k-fold cross validation model evaluation
-    kfold = KFold(n_splits=K_FOLDS, shuffle=True)
-    fold_performance = []
+    # track the best hyperparameters
+    best_hyperparameters = None
+    best_avg_loss = float('inf')
+    best_avg_f1 = None
+    best_hyperparameters_model = None
+    best_hyperparameters_loss_history = None
 
-    # track the best model
-    best_fold_loss = float('inf')
-    best_fold_wf1 = None
-    best_fold_model = None
-    best_fold_index = None
+    for BATCH_SIZE, LEARNING_RATE, DROPOUT in hyperparameter_grid:
+        print(f'---------------------------------\n[INFO]: Testing Hyperparameters - BATCH_SIZE: {BATCH_SIZE}, LEARNING_RATE: {LEARNING_RATE}, DROPOUT: {DROPOUT}')
 
-    for fold, (train_idx, val_idx) in enumerate(kfold.split(X_train)):
-        print(f'---------------------------------\n[INFO]: Fold {fold+1}/{K_FOLDS}')
+        # k-fold cross validation model evaluation
+        kfold = KFold(n_splits=K_FOLDS, shuffle=True)
+        fold_performance = []
 
-        # create dataloaders for training and validation
-        train_subset = Subset(TensorDataset(X_train, y_train), train_idx)
-        val_subset = Subset(TensorDataset(X_train, y_train), val_idx)
-        train_loader = DataLoader(train_subset, batch_size=BATCH_SIZE, shuffle=True)
-        val_loader = DataLoader(val_subset, batch_size=len(val_idx), shuffle=False)
+        # track the best model for current hyperparameters
+        best_fold_loss = float('inf')
 
-        # model
-        model = Model().to(device)
+        for fold, (train_idx, val_idx) in enumerate(kfold.split(X_train)):
+            print(f'---------------------------------\n[INFO]: Fold {fold+1}/{K_FOLDS}')
 
-        # optimizer
-        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+            # create dataloaders for training and validation
+            train_subset = Subset(TensorDataset(X_train, y_train), train_idx)
+            val_subset = Subset(TensorDataset(X_train, y_train), val_idx)
+            train_loader = DataLoader(train_subset, batch_size=BATCH_SIZE, shuffle=True)
+            val_loader = DataLoader(val_subset, batch_size=len(val_idx), shuffle=False)
 
-        # train the model with early stopping
-        model, val_loss, wf1_score, loss_history = early_stopping(train_loader, val_loader, model, criterion, optimizer, device, PATIENCE, DELTA)
-        fold_performance.append((val_loss, wf1_score))
-        print(f'[INFO]: Loss: {val_loss}, F1: {wf1_score}')
+            # model
+            model = Model(dropout=DROPOUT).to(device)
 
-        # save the best model
-        if val_loss < best_fold_loss:
-            best_fold_loss = val_loss
-            best_fold_wf1 = wf1_score
-            best_fold_model = model.state_dict()
-            best_fold_loss_history = loss_history
-            best_fold_index = fold + 1
+            # optimizer
+            optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-    # calculate average performance across folds
-    avg_loss = np.mean([perf[0] for perf in fold_performance])
-    avg_f1 = np.mean([perf[1] for perf in fold_performance])
+            # train the model with early stopping
+            model, val_loss, wf1_score, loss_history = early_stopping(train_loader, val_loader, model, criterion, optimizer, device, PATIENCE, DELTA)
+            fold_performance.append((val_loss, wf1_score))
+            print(f'[INFO]: Loss: {val_loss}, F1: {wf1_score}')
 
-    # print average performance
-    print(f'---------------------------------\n[INFO]: Average Loss: {avg_loss}, Average Weighted F1: {avg_f1}')
+            # save the best model for the current hyperparameters
+            if val_loss < best_fold_loss:
+                best_fold_loss = val_loss
+                best_fold_model = model.state_dict()
+                best_fold_loss_history = loss_history
+
+        # calculate average performance across folds for the current hyperparameters
+        avg_loss = np.mean([perf[0] for perf in fold_performance])
+        avg_f1 = np.mean([perf[1] for perf in fold_performance])
+
+        # save the best hyperparameters and model if current hyperparameters are better
+        if avg_loss < best_avg_loss:
+            best_avg_loss = avg_loss
+            best_avg_f1 = avg_f1
+            best_hyperparameters = (BATCH_SIZE, LEARNING_RATE, DROPOUT)
+            best_hyperparameters_fold_performance = fold_performance
+            best_hyperparameters_model = best_fold_model
+            best_hyperparameters_loss_history = best_fold_loss_history
+
+        print(f'---------------------------------\n[INFO]: Hyperparameters - BATCH_SIZE: {BATCH_SIZE}, LEARNING_RATE: {LEARNING_RATE}, DROPOUT: {DROPOUT}')
+        print(f'[INFO]: Average Loss: {avg_loss}, Average Weighted F1: {avg_f1}')
+
+    # print best hyperparameters and their performance
+    print(f'---------------------------------\n[INFO]: Best Hyperparameters - BATCH_SIZE: {best_hyperparameters[0]}, LEARNING_RATE: {best_hyperparameters[1]}, DROPOUT: {best_hyperparameters[2]}')
+    print(f'[INFO]: Best Average Loss: {best_avg_loss}, Best Average Weighted F1: {best_avg_f1}')
 
     # save the best model, performance and best training history
-    model_dir = root / 'models' / f'nn_{args.feature}_f1_{round(avg_f1, 4)}'
+    model_dir = root / 'models' / f'nn_{args.feature}_f1_{round(best_avg_f1, 4)}'
     model_dir.mkdir(parents=True, exist_ok=True)
     
-    torch.save(best_fold_model, model_dir / f'nn_{args.feature}_model.pth')
+    torch.save(best_hyperparameters_model, model_dir / f'nn_{args.feature}_model.pth')
     
     with open(model_dir / 'cross_val_performance.txt', 'w') as f:
-        for fold, (loss, f1) in enumerate(fold_performance):
+        for fold, (loss, f1) in enumerate(best_hyperparameters_fold_performance):
             f.write(f'Fold {fold+1} | Loss: {loss} | F1: {f1}\n')
-        f.write(f'\nAverage Loss: {avg_loss}, Average Weighted F1: {avg_f1}\n')
-        f.write(f'Best Fold: {best_fold_index}')
+        f.write(f'\nAverage Loss: {best_avg_loss}, Average Weighted F1: {best_avg_f1}\n')
+        f.write(f'Best fold: {np.argmin([perf[0] for perf in best_hyperparameters_fold_performance]) + 1}')
     
-    best_fold_loss_history.to_csv(model_dir / 'best_loss_history.csv', index=False)
+    best_hyperparameters_loss_history.to_csv(model_dir / 'best_loss_history.csv', index=False)
 
-    # save hyperparameters along with model architecture
+    # save best hyperparameters along with model architecture
     with open(model_dir / 'hyperparameters.txt', 'w') as f:
-        f.write(f'Batch Size: {BATCH_SIZE}\nLearning Rate: {LEARNING_RATE}\nK-Folds: {K_FOLDS}\nPatience: {PATIENCE}\nDelta: {DELTA}')
+        f.write(f'Batch Size: {best_hyperparameters[0]}\nLearning Rate: {best_hyperparameters[1]}\nDropout: {best_hyperparameters[2]}\nK-Folds: {K_FOLDS}\nPatience: {PATIENCE}\nDelta: {DELTA}')
         f.write(f'\n\nModel Architecture:\n{model}')
         
     print(f'[DONE]: Best model, cross-validation performances, and training history of the best model saved at {model_dir}.')
