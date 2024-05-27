@@ -48,9 +48,6 @@ if __name__ == '__main__':
     model_dir = root / 'models' / f'logistic_f1_{best_score:.4f}'
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    with open(model_dir / 'best_estimator.pkl', 'wb') as f:
-        pickle.dump(best_estimator, f)
-
     cv_results_df = pd.DataFrame(cv_results)
     cv_results_df.to_csv(model_dir / 'cv_results.csv', index=False)
     
