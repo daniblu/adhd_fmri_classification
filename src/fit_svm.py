@@ -68,7 +68,7 @@ if __name__ == '__main__':
     with open(model_dir / f'best_model.pkl', 'wb') as f:
         pickle.dump(best_estimator, f)
     
-    with open(model_dir / 'best_params.txt', 'w') as f:
+    with open(model_dir / 'hyperparameters.txt', 'w') as f:
         f.write(str(best_params))
     
     print(f'[DONE]: Hyperparameters tuned and model saved to {model_dir}.')
