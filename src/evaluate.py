@@ -58,14 +58,16 @@ def load_data(path: Path, model_info: Dict):
     '''
 
     if model_info['type'] == 'logistic':
-        subject_ids = pd.read_csv(path / 'test_subject_order_pheno.txt', header=None).values.flatten()
+        with open(path / 'test_subject_order_pheno.txt', 'r') as f:
+            subject_ids = f.read().splitlines()
 
         with open(path / 'pheno_test.pkl', 'rb') as f:
             X_test, y_test = pickle.load(f)
             y_test = y_test.tolist()
     
     else:
-        subject_ids = pd.read_csv(path / 'test_subject_order_neuro.txt', header=None).values.flatten()
+        with open(path / 'test_subject_order_neuro.txt', 'r') as f:
+            subject_ids = f.read().splitlines()
 
         with open(path / f'{model_info["feature"]}_features_test.pkl', 'rb') as f:
             X_test, y_test = pickle.load(f)
@@ -95,7 +97,27 @@ def create_summary_dict(classification_report: Dict):
 
 
 
-def evaluate_nn(model, X_test, y_test):
+def compute_ig(model, model_path, X_test):
+    '''
+    Compute integrated gradients for a given model and input.
+    '''
+
+    # load baseline
+    with open(model_path / 'baseline.pkl', 'rb') as f:
+        baseline = pickle.load(f)
+    baseline = torch.tensor(baseline, dtype=torch.float32).unsqueeze(0)
+
+    # compute integrated gradients and sum across all features
+    ig = IntegratedGradients(model)
+    ig_attributions = ig.attribute(X_test, target=0, baselines=baseline)
+    ig_attributions = ig_attributions.cpu().numpy()
+    ig_attributions = ig_attributions.sum(axis=0)
+
+    return ig_attributions
+
+
+
+def evaluate_nn(model, model_path, X_test, y_test):
     '''
     Evaluate neural network model on test set.
     '''
@@ -115,14 +137,8 @@ def evaluate_nn(model, X_test, y_test):
     correct_indices = [i for i, (pred, true) in enumerate(zip(y_pred, y_test)) if pred == true and true == 1.0]
     X_test_correct = X_test[correct_indices]
 
-    # integrated gradients for X-test entries where prediction was correct
-    ig = IntegratedGradients(model)
-    ig_attributions = ig.attribute(X_test_correct, target=0)
-    ig_attributions = ig_attributions.cpu().numpy()
-
-    # take the absolute value of the attributions and get column-wise sum
-    ig_attributions = abs(ig_attributions)
-    ig_attributions = ig_attributions.sum(axis=0)
+    # compute integrated gradients
+    ig_attributions = compute_ig(model, model_path, X_test_correct)
 
 
     return y_pred, summary_dict, ig_attributions
@@ -150,7 +166,7 @@ def create_pred_df(y_pred, y_test, subject_ids):
     '''
 
     pred_df = pd.DataFrame({'subject_id': subject_ids, 'true_adhd': y_test, 'pred_adhd': y_pred})
-    pred_df['correct'] = (pred_df['true_adhd'] == pred_df['pred_adhd']).astype(int)
+    pred_df['subject_id'] = pred_df['subject_id'].astype(str)
 
     return pred_df
 
@@ -173,7 +189,7 @@ if __name__ == '__main__':
 
     # evaluate model
     if model_info['type'] == 'nn':
-        y_pred, summary_dict, ig_attributions = evaluate_nn(model, X_test, y_test)
+        y_pred, summary_dict, ig_attributions = evaluate_nn(model, model_path, X_test, y_test)
 
         # save integrated gradients (a numpy array) to txt file
         with open(model_path / 'ig_attributions.txt', 'w') as f:
