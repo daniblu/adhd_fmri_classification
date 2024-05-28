@@ -114,7 +114,7 @@ def compute_ig(model, model_path, X_test):
 
     # compute integrated gradients and sum across all features
     ig = IntegratedGradients(model)
-    ig_attributions = ig.attribute(X_test, target=0, baselines=baseline)
+    ig_attributions = ig.attribute(X_test, target=0, baselines=baseline, n_steps=150)
     ig_attributions = ig_attributions.cpu().numpy()
     ig_attributions = ig_attributions.sum(axis=0)
 
