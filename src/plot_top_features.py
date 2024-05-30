@@ -84,7 +84,6 @@ if __name__ == '__main__':
     # load the summed integrated gradients
     with open(ig_path, 'r') as f:
         features_ig = np.array([float(line.strip()) for line in f.readlines()])
-    ig_sum = np.sum(features_ig)
 
     # load images
     atlas = nib.load(atlas_path).get_fdata()
@@ -96,14 +95,26 @@ if __name__ == '__main__':
     # combine regions and integrated gradients in pandas dataframe
     features_ig_df = pd.DataFrame({'region': regions, 'ig': features_ig}, dtype=float)
 
+    # remove all rows with negative integrated gradients
+    features_ig_df = features_ig_df[features_ig_df['ig'] >= 0]
+
+    # calculate sum of (positive) integrated gradients
+    ig_sum = features_ig_df['ig'].sum()
+
     # sort by integrated gradients
     features_ig_df = features_ig_df.sort_values(by='ig', ascending=False)
+
+    # calculate proportion of total integrated gradients
+    features_ig_df['prop'] = features_ig_df['ig'] / ig_sum
 
     # calculate cumulative sum of integrated gradients
     features_ig_df['cumsum'] = features_ig_df['ig'].cumsum()
 
     # calculate proportion of total integrated gradients
     features_ig_df['cumsum_prop'] = features_ig_df['cumsum'] / ig_sum
+
+    # save features_ig_df for inspection
+    features_ig_df.to_csv(model_dir / 'features_ig_df.csv', index=False)
 
     # get top features
     top_features = features_ig_df['region'][features_ig_df['cumsum_prop'] <= args.top_prop].values.tolist()
