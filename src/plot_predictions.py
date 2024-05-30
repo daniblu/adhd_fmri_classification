@@ -69,14 +69,16 @@ if __name__ == '__main__':
     # plot violin plot, increase x axis tick labels
     plt.figure(figsize=(10, 6))
     sns.violinplot(x='pred_category', y='ADHD Index', data=predictions_violin, 
-                   order=['True Positive', 'False Positive', 'True Negative', 'False Negative'],
+                   order=['True Positive', 'False Negative', 'True Negative', 'False Positive'],
                    fill=False,
                    linewidth=2,
                    inner='point', 
                    color='black')
     plt.xlabel('')
-    plt.ylabel('ADHD Index', fontsize=14)
-    plt.xticks(fontsize=14)
+    plt.ylabel('ADHD Index', fontsize=16)
+    plt.yticks(fontsize=13)
+    plt.xticks(fontsize=16)
+    ax_size = plt.gca()
     plt.savefig(root / 'models' / args.model_dir / 'adhd_index_distribution.png')
     plt.close()
 
@@ -86,12 +88,12 @@ if __name__ == '__main__':
     predictions_bar = predictions_bar.reindex(order)
 
     # plot stacked bar plot
-    predictions_bar.plot(figsize=(10, 6),
+    predictions_bar.plot(figsize=(8, 4),
                          kind='barh', 
                          stacked=True, 
                          color=['#bfbcbb', '#7a7978'],
                          edgecolor='black')
-    plt.legend(title='', fontsize=14)
+    plt.legend(title='', fontsize=14, loc='lower right')
     plt.xlabel('Number of test samples', fontsize=14)
     plt.ylabel('')
     plt.yticks(fontsize=14)
