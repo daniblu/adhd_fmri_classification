@@ -1,0 +1,1 @@
+This folder will contain all processed data produced by the data processing scripts _prep_neuro_data.py_ and _prep_pheno_data.py_.

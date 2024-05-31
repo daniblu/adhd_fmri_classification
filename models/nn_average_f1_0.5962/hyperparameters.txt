@@ -1,0 +1,18 @@
+Batch Size: 32
+Learning Rate: 0.01
+Dropout: 0.4
+Two Layers: False
+K-Folds: 10
+Patience: 5
+Delta: 0.001
+
+Model Architecture:
+Model(
+  (linear_relu_stack): Sequential(
+    (0): Linear(in_features=111, out_features=64, bias=True)
+    (1): ReLU()
+    (2): Dropout(p=0.4, inplace=False)
+    (3): Linear(in_features=64, out_features=1, bias=True)
+    (4): Sigmoid()
+  )
+)

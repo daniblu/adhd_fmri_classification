@@ -1,0 +1,6 @@
+Best parameters: {'C': 1, 'penalty': 'l2', 'solver': 'liblinear'}
+Coefficients:
+Gender: 1.2689513248276847
+Age: -0.413856229502248
+Handedness: -0.30780364421150086
+Full4 IQ: -0.6149374394295549
