@@ -56,3 +56,25 @@ Finally, the brain regions with the biggest contribution to true positive test p
 python3 src/plot_top_features.py -m nn_centrality_f1_0.573
 ```
 
+### Repository overview
+````
+.
+├── data/ 
+│   ├── ADHD-200/  
+│   └── processed/ 
+|                    
+├── models/
+│   ├── logistic_f1_0.6809
+│   ├── nn_centrality_f1_0.573
+│   └── ...
+|                     
+├── src/
+|
+├── .gitignore
+├── LICENSE
+├── README.md
+├── requirements.txt
+├── setup_env.sh
+└── setup_nb_kernel.sh
+
+````
